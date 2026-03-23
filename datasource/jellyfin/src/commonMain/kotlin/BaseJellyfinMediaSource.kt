@@ -9,11 +9,11 @@
 
 package me.him188.ani.datasources.jellyfin
 
-import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.asFlow
@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.flatMapMerge
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import me.him188.ani.datasources.api.DefaultMedia
 import me.him188.ani.datasources.api.EpisodeSort
 import me.him188.ani.datasources.api.MediaExtraFiles
@@ -165,7 +166,7 @@ abstract class BaseJellyfinMediaSource(
         recursive: Boolean = true,
         parentId: String? = null,
     ) = client.use {
-        get("$baseUrl/Items") {
+        val text = get("$baseUrl/Items") {
             configureAuthorizationHeaders()
             parameter("userId", userId)
             parameter("enableImages", false)
@@ -173,7 +174,8 @@ abstract class BaseJellyfinMediaSource(
             parameter("searchTerm", subjectName)
             parameter("fields", "MediaStreams")
             parameter("parentId", parentId)
-        }.body<SearchResponse>()
+        }.bodyAsText()
+        json.decodeFromString<SearchResponse>(text)
     }
 
     private fun HttpRequestBuilder.configureAuthorizationHeaders() {
@@ -181,6 +183,13 @@ abstract class BaseJellyfinMediaSource(
             HttpHeaders.Authorization,
             "MediaBrowser Token=\"$apiKey\"",
         )
+    }
+
+    private companion object {
+        // Emby/Jellyfin API responses contain many fields not modelled in the data classes.
+        // Using ignoreUnknownKeys = true ensures deserialization succeeds regardless of which
+        // extra fields the server returns (e.g. Container, UserData, video stream metadata).
+        val json = Json { ignoreUnknownKeys = true }
     }
 }
 
